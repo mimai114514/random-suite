@@ -59,7 +59,7 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-$installerOutDir = "$rootDir\random-suite\Output"
+$installerOutDir = "$rootDir\Output"
 if (Test-Path $installerOutDir) {
     Copy-Item -Path "$installerOutDir\*" -Destination $releaseDir -Force
     Write-Host "Installer copied to $releaseDir" -ForegroundColor Green
