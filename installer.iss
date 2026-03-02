@@ -1,6 +1,6 @@
 ; Random Suite (FT & Desktop) Installer Script
 #define MyAppName "Random Suite"
-#define MyAppVersion "4.0.1" ; 每次发版更新这里
+#define MyAppVersion "4.0.2" ; 每次发版更新这里
 #define MyAppPublisher "Infinity"
 #define MyAppExeNameFT "Random_FloatingTool.exe"
 #define MyAppExeNameDesktop "random_desktop.exe"
