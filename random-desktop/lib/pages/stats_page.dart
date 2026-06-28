@@ -24,6 +24,7 @@ class _StatsPageState extends State<StatsPage> {
   List<Map<String, dynamic>> _itemTotalCounts = [];
   List<Map<String, dynamic>> _itemPeriodCounts = [];
   List<Map<String, dynamic>> _itemLastDrawn = [];
+  List<Map<String, dynamic>> _itemDrawCountBins = []; // 抽取次数区间分布直方图数据
   int _periodDays = 7; // 7 or 30
 
   // 展开状态
@@ -73,10 +74,55 @@ class _StatsPageState extends State<StatsPage> {
       _periodDays,
     );
     final lastDrawn = await widget.db.getItemLastDrawTime(_selectedGroupId!);
+
+    // 计算抽取次数的10区间分布 (直方图数据)
+    final List<Map<String, dynamic>> bins = [];
+    if (totalCounts.isNotEmpty) {
+      final listCounts = totalCounts.map((e) => e['selected_count'] as int? ?? 0).toList();
+      final minCount = listCounts.reduce((a, b) => a < b ? a : b);
+      final maxCount = listCounts.reduce((a, b) => a > b ? a : b);
+
+      if (maxCount - minCount < 10) {
+        // 极差小于10，直接按具体次数统计展示
+        final Map<int, int> exactDist = {};
+        for (final c in listCounts) {
+          exactDist[c] = (exactDist[c] ?? 0) + 1;
+        }
+        final sortedKeys = exactDist.keys.toList()..sort();
+        for (final k in sortedKeys) {
+          bins.add({
+            'label': '$k',
+            'people': exactDist[k]!,
+          });
+        }
+      } else {
+        // 极差大于等于10，切分成 10 个区间进行统计
+        final double range = (maxCount - minCount).toDouble();
+        final double binWidth = range / 10.0;
+        final List<int> peopleCounts = List.filled(10, 0);
+
+        for (final c in listCounts) {
+          int idx = ((c - minCount) / binWidth).floor();
+          if (idx >= 10) idx = 9;
+          peopleCounts[idx]++;
+        }
+
+        for (int i = 0; i < 10; i++) {
+          final start = (minCount + i * binWidth).round();
+          final end = (minCount + (i + 1) * binWidth).round();
+          bins.add({
+            'label': '$start-$end',
+            'people': peopleCounts[i],
+          });
+        }
+      }
+    }
+
     setState(() {
       _itemTotalCounts = totalCounts;
       _itemPeriodCounts = periodCounts;
       _itemLastDrawn = lastDrawn;
+      _itemDrawCountBins = bins;
       _expandTotal = false;
       _expandPeriod = false;
       _expandLastDrawn = false;
@@ -225,6 +271,10 @@ class _StatsPageState extends State<StatsPage> {
         ),
         const SizedBox(height: 16),
 
+        // 抽取次数 - 人数分布直方图
+        _buildHistogramChart(colorScheme),
+        const SizedBox(height: 12),
+
         // 板块一：总抽取次数
         _buildItemStatCard(
           colorScheme,
@@ -245,6 +295,128 @@ class _StatsPageState extends State<StatsPage> {
         // 板块三：最久未被抽取
         _buildLastDrawnCard(colorScheme),
       ],
+    );
+  }
+
+  /// 抽取次数-人数分布直方图
+  Widget _buildHistogramChart(ColorScheme colorScheme) {
+    if (_itemDrawCountBins.isEmpty) return const SizedBox.shrink();
+
+    final maxPeople = _itemDrawCountBins
+        .map((e) => e['people'] as int)
+        .reduce((a, b) => a > b ? a : b)
+        .toDouble();
+
+    return Card(
+      elevation: 0,
+      color: colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 24, 24, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.bar_chart_rounded, size: 18, color: colorScheme.primary),
+                const SizedBox(width: 6),
+                const Text(
+                  '抽取次数 - 人数分布',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 200,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: maxPeople * 1.2 > 0 ? maxPeople * 1.2 : 5,
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    horizontalInterval: (maxPeople / 4).ceilToDouble().clamp(
+                      1,
+                      double.infinity,
+                    ),
+                    getDrawingHorizontalLine: (value) => FlLine(
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                      strokeWidth: 1,
+                    ),
+                  ),
+                  titlesData: FlTitlesData(
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 32,
+                        getTitlesWidget: (value, meta) {
+                          final idx = value.toInt();
+                          if (idx >= 0 && idx < _itemDrawCountBins.length) {
+                            final label = _itemDrawCountBins[idx]['label'] as String;
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                label,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: colorScheme.outline,
+                                ),
+                              ),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
+                      ),
+                    ),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 32,
+                        getTitlesWidget: (value, meta) {
+                          if (value == value.roundToDouble()) {
+                            return Text(
+                              '${value.toInt()}人',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: colorScheme.outline,
+                              ),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
+                      ),
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  barGroups: List.generate(_itemDrawCountBins.length, (i) {
+                    final peopleCount = _itemDrawCountBins[i]['people'] as int;
+                    return BarChartGroupData(
+                      x: i,
+                      barRods: [
+                        BarChartRodData(
+                          toY: peopleCount.toDouble(),
+                          width: _itemDrawCountBins.length > 8 ? 16 : 24,
+                          color: colorScheme.primary,
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(6),
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
