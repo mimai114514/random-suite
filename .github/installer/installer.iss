@@ -14,7 +14,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 OutputDir=..\..\dist
-OutputBaseFilename=RandomSuite_Setup_v{#MyAppVersion}
+OutputBaseFilename=setup-{#MyAppVersion}
 Compression=lzma
 SolidCompression=yes
 ; 指定在安装前如果程序在运行，提示用户关闭（支持静默关闭）
