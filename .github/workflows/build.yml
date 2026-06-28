@@ -42,6 +42,30 @@ jobs:
       - name: Publish
         working-directory: random-floating
         run: dotnet publish Random_FloatingTool/Random_FloatingTool.csproj -c Release --no-restore
+      
+      - name: Decode Certificate
+        shell: pwsh
+        run: |
+          $certBytes = [System.Convert]::FromBase64String("${{ secrets.SIGNING_CERT_BASE64 }}")
+          [System.IO.File]::WriteAllBytes("${{ github.workspace }}\cert.pfx", $certBytes)
+          
+      - name: Sign Executable
+        shell: pwsh
+        run: |
+          $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits" -Filter signtool.exe -Recurse | Select-Object -First 1
+          if (-not $signtool) {
+              throw "signtool.exe not found!"
+          }
+          & $signtool.FullName sign /fd SHA256 /f "${{ github.workspace }}\cert.pfx" /p "${{ secrets.SIGNING_CERT_PASSWORD }}" "random-floating/Random_FloatingTool/bin/Release/net8.0-windows10.0.19041.0/publish/Random_FloatingTool.exe"
+          
+      - name: Clean up PFX
+        shell: pwsh
+        if: always()
+        run: |
+          if (Test-Path "${{ github.workspace }}\cert.pfx") {
+              Remove-Item "${{ github.workspace }}\cert.pfx" -Force
+          }
+
       - uses: actions/upload-artifact@v4
         with:
           name: floating-build

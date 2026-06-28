@@ -19,6 +19,8 @@ Compression=lzma
 SolidCompression=yes
 ; 指定在安装前如果程序在运行，提示用户关闭（支持静默关闭）
 CloseApplications=yes
+; 强制要求管理员权限（用于证书导入及写入 Program Files 安全目录）
+PrivilegesRequired=admin
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -26,6 +28,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Files]
 ; 打包 FT (Random_FloatingTool)
 Source: "..\..\random-floating\Random_FloatingTool\bin\Release\net8.0-windows10.0.19041.0\publish\*"; DestDir: "{app}\FT"; Excludes: "*.zip"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "RandomFloatingTool.cer"; DestDir: "{app}\FT"; Flags: ignoreversion
 ; 打包 Desktop (random-desktop)
 Source: "..\..\random-desktop\build\windows\x64\runner\Release\*"; DestDir: "{app}\Desktop"; Flags: ignoreversion recursesubdirs createallsubdirs
 
@@ -40,5 +43,9 @@ Name: "{group}\Random Desktop"; Filename: "{app}\Desktop\{#MyAppExeNameDesktop}"
 Name: "{group}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"
 
 [Run]
+; 安装时自动导入公钥证书到系统根证书存储和受信任的发布者中
+Filename: "certutil.exe"; Parameters: "-addstore -f ""Root"" ""{app}\FT\RandomFloatingTool.cer"""; Flags: runhidden
+Filename: "certutil.exe"; Parameters: "-addstore -f ""TrustedPublisher"" ""{app}\FT\RandomFloatingTool.cer"""; Flags: runhidden
+
 Filename: "{app}\FT\{#MyAppExeNameFT}"; Description: "启动 Random Floating Tool"; Flags: nowait postinstall skipifsilent
 Filename: "{app}\Desktop\{#MyAppExeNameDesktop}"; Description: "启动 Random Desktop"; Flags: nowait postinstall skipifsilent unchecked
