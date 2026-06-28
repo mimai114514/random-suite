@@ -72,15 +72,15 @@ class _StatsPageState extends State<StatsPage> {
     );
     final lastDrawn = await widget.db.getItemLastDrawTime(_selectedGroupId!);
 
-    // 计算抽取次数的 5 区间分布 (直方图数据)
+    // 计算抽取次数的 7 区间分布 (直方图数据)
     final List<Map<String, dynamic>> bins = [];
     if (totalCounts.isNotEmpty) {
       final listCounts = totalCounts.map((e) => e['selected_count'] as int? ?? 0).toList();
       final minCount = listCounts.reduce((a, b) => a < b ? a : b);
       final maxCount = listCounts.reduce((a, b) => a > b ? a : b);
 
-      if (maxCount - minCount < 5) {
-        // 极差小于 5，直接按具体次数统计展示
+      if (maxCount - minCount < 7) {
+        // 极差小于 7，直接按具体次数统计展示
         final Map<int, int> exactDist = {};
         for (final c in listCounts) {
           exactDist[c] = (exactDist[c] ?? 0) + 1;
@@ -93,18 +93,18 @@ class _StatsPageState extends State<StatsPage> {
           });
         }
       } else {
-        // 极差大于等于 5，切分成 5 个区间进行统计
+        // 极差大于等于 7，切分成 7 个区间进行统计
         final double range = (maxCount - minCount).toDouble();
-        final double binWidth = range / 5.0;
-        final List<int> peopleCounts = List.filled(5, 0);
+        final double binWidth = range / 7.0;
+        final List<int> peopleCounts = List.filled(7, 0);
 
         for (final c in listCounts) {
           int idx = ((c - minCount) / binWidth).floor();
-          if (idx >= 5) idx = 4;
+          if (idx >= 7) idx = 6;
           peopleCounts[idx]++;
         }
 
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 7; i++) {
           final start = (minCount + i * binWidth).round();
           final end = (minCount + (i + 1) * binWidth).round();
           bins.add({
@@ -430,7 +430,7 @@ class _StatsPageState extends State<StatsPage> {
                       barRods: [
                         BarChartRodData(
                           toY: peopleCount.toDouble(),
-                          width: 36,
+                          width: 32,
                           color: colorScheme.primary,
                           borderRadius: const BorderRadius.vertical(
                             top: Radius.circular(6),
@@ -839,6 +839,44 @@ class _StatsPageState extends State<StatsPage> {
           height: 200,
           child: LineChart(
             LineChartData(
+              lineTouchData: LineTouchData(
+                touchTooltipData: LineTouchTooltipData(
+                  getTooltipColor: (touchedSpot) => colorScheme.surfaceContainerHigh,
+                  tooltipBorder: BorderSide(
+                    color: colorScheme.outlineVariant,
+                    width: 1,
+                  ),
+                  getTooltipItems: (List<LineBarSpot> touchedSpots) {
+                    return touchedSpots.map((barSpot) {
+                      final idx = barSpot.x.toInt();
+                      if (idx >= 0 && idx < _dailyCounts.length) {
+                        final dateStr = _dailyCounts[idx]['date'] as String;
+                        final count = _dailyCounts[idx]['count'] as int;
+                        final shortDate = dateStr.length >= 10 ? dateStr.substring(5) : dateStr;
+                        return LineTooltipItem(
+                          '日期: $shortDate\n',
+                          TextStyle(
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                          children: [
+                            TextSpan(
+                              text: '抽取次数: $count 次',
+                              style: TextStyle(
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                      return null;
+                    }).toList();
+                  },
+                ),
+              ),
               gridData: FlGridData(
                 show: true,
                 drawVerticalLine: false,
