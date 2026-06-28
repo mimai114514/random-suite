@@ -68,7 +68,7 @@ class AboutPage extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                '版本: v4.0.2',
+                '版本: v4.1.0',
                 style: textTheme.bodyMedium?.copyWith(
                   color: colorScheme.outline,
                 ),
