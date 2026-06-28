@@ -14,7 +14,6 @@ class StatsPage extends StatefulWidget {
 class _StatsPageState extends State<StatsPage> {
   bool _isLoading = true;
   Map<String, int> _modeCounts = {};
-  List<Map<String, dynamic>> _groupCounts = [];
   List<Map<String, dynamic>> _dailyCounts = [];
   int _totalLogs = 0;
 
@@ -43,14 +42,12 @@ class _StatsPageState extends State<StatsPage> {
   Future<void> _loadStats() async {
     setState(() => _isLoading = true);
     final modeCounts = await widget.db.getModeCounts();
-    final groupCounts = await widget.db.getGroupDrawCounts();
     final dailyCounts = await widget.db.getDailyDrawCounts(14);
     final totalLogs = await widget.db.getLogCount();
     final groups = await widget.db.getGroups();
 
     setState(() {
       _modeCounts = modeCounts;
-      _groupCounts = groupCounts;
       _dailyCounts = dailyCounts;
       _totalLogs = totalLogs;
       _groups = groups;
@@ -75,15 +72,15 @@ class _StatsPageState extends State<StatsPage> {
     );
     final lastDrawn = await widget.db.getItemLastDrawTime(_selectedGroupId!);
 
-    // 计算抽取次数的10区间分布 (直方图数据)
+    // 计算抽取次数的 5 区间分布 (直方图数据)
     final List<Map<String, dynamic>> bins = [];
     if (totalCounts.isNotEmpty) {
       final listCounts = totalCounts.map((e) => e['selected_count'] as int? ?? 0).toList();
       final minCount = listCounts.reduce((a, b) => a < b ? a : b);
       final maxCount = listCounts.reduce((a, b) => a > b ? a : b);
 
-      if (maxCount - minCount < 10) {
-        // 极差小于10，直接按具体次数统计展示
+      if (maxCount - minCount < 5) {
+        // 极差小于 5，直接按具体次数统计展示
         final Map<int, int> exactDist = {};
         for (final c in listCounts) {
           exactDist[c] = (exactDist[c] ?? 0) + 1;
@@ -96,18 +93,18 @@ class _StatsPageState extends State<StatsPage> {
           });
         }
       } else {
-        // 极差大于等于10，切分成 10 个区间进行统计
+        // 极差大于等于 5，切分成 5 个区间进行统计
         final double range = (maxCount - minCount).toDouble();
-        final double binWidth = range / 10.0;
-        final List<int> peopleCounts = List.filled(10, 0);
+        final double binWidth = range / 5.0;
+        final List<int> peopleCounts = List.filled(5, 0);
 
         for (final c in listCounts) {
           int idx = ((c - minCount) / binWidth).floor();
-          if (idx >= 10) idx = 9;
+          if (idx >= 5) idx = 4;
           peopleCounts[idx]++;
         }
 
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 5; i++) {
           final start = (minCount + i * binWidth).round();
           final end = (minCount + (i + 1) * binWidth).round();
           bins.add({
@@ -198,13 +195,7 @@ class _StatsPageState extends State<StatsPage> {
                         _buildDailyChart(colorScheme),
                         const SizedBox(height: 20),
                       ],
-                      // 各组抽取分布
-                      if (_groupCounts.isNotEmpty) ...[
-                        _buildSectionTitle('各列表组抽取分布', Icons.pie_chart_rounded),
-                        const SizedBox(height: 8),
-                        _buildGroupChart(colorScheme),
-                        const SizedBox(height: 20),
-                      ],
+
                       // 项统计
                       if (_groups.isNotEmpty) ...[
                         const Divider(),
@@ -331,8 +322,45 @@ class _StatsPageState extends State<StatsPage> {
               height: 200,
               child: BarChart(
                 BarChartData(
-                  alignment: BarChartAlignment.spaceAround,
+                  alignment: BarChartAlignment.center,
+                  groupsSpace: 16,
                   maxY: maxPeople * 1.2 > 0 ? maxPeople * 1.2 : 5,
+                  barTouchData: BarTouchData(
+                    touchTooltipData: BarTouchTooltipData(
+                      getTooltipColor: (group) => colorScheme.surfaceContainerHigh,
+                      tooltipBorder: BorderSide(
+                        color: colorScheme.outlineVariant,
+                        width: 1,
+                      ),
+                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                        final idx = group.x.toInt();
+                        if (idx >= 0 && idx < _itemDrawCountBins.length) {
+                          final label = _itemDrawCountBins[idx]['label'] as String;
+                          final people = _itemDrawCountBins[idx]['people'] as int;
+                          final countLabel = label.contains('-') ? '$label 次' : '$label 次';
+                          return BarTooltipItem(
+                            '抽取次数: $countLabel\n',
+                            TextStyle(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: '人数: $people 人',
+                                style: TextStyle(
+                                  color: colorScheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
                   gridData: FlGridData(
                     show: true,
                     drawVerticalLine: false,
@@ -402,7 +430,7 @@ class _StatsPageState extends State<StatsPage> {
                       barRods: [
                         BarChartRodData(
                           toY: peopleCount.toDouble(),
-                          width: _itemDrawCountBins.length > 8 ? 16 : 24,
+                          width: 36,
                           color: colorScheme.primary,
                           borderRadius: const BorderRadius.vertical(
                             top: Radius.circular(6),
@@ -901,109 +929,5 @@ class _StatsPageState extends State<StatsPage> {
     );
   }
 
-  /// 列表组分布柱状图
-  Widget _buildGroupChart(ColorScheme colorScheme) {
-    final data = _groupCounts.take(10).toList();
-    if (data.isEmpty) return const SizedBox.shrink();
 
-    final maxCount = data
-        .map((e) => e['count'] as int)
-        .reduce((a, b) => a > b ? a : b)
-        .toDouble();
-
-    return Card(
-      elevation: 0,
-      color: colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 24, 24, 16),
-        child: SizedBox(
-          height: 220,
-          child: BarChart(
-            BarChartData(
-              alignment: BarChartAlignment.spaceAround,
-              maxY: maxCount * 1.2,
-              gridData: FlGridData(
-                show: true,
-                drawVerticalLine: false,
-                horizontalInterval: (maxCount / 4).ceilToDouble().clamp(
-                  1,
-                  double.infinity,
-                ),
-                getDrawingHorizontalLine: (value) => FlLine(
-                  color: colorScheme.outlineVariant.withValues(alpha: 0.3),
-                  strokeWidth: 1,
-                ),
-              ),
-              titlesData: FlTitlesData(
-                topTitles: const AxisTitles(
-                  sideTitles: SideTitles(showTitles: false),
-                ),
-                rightTitles: const AxisTitles(
-                  sideTitles: SideTitles(showTitles: false),
-                ),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 32,
-                    getTitlesWidget: (value, meta) {
-                      final idx = value.toInt();
-                      if (idx >= 0 && idx < data.length) {
-                        final name = data[idx]['name'] as String;
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            name.length > 6 ? '${name.substring(0, 5)}…' : name,
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: colorScheme.outline,
-                            ),
-                          ),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
-                ),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 32,
-                    getTitlesWidget: (value, meta) {
-                      if (value == value.roundToDouble()) {
-                        return Text(
-                          '${value.toInt()}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: colorScheme.outline,
-                          ),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
-                ),
-              ),
-              borderData: FlBorderData(show: false),
-              barGroups: List.generate(data.length, (i) {
-                return BarChartGroupData(
-                  x: i,
-                  barRods: [
-                    BarChartRodData(
-                      toY: (data[i]['count'] as int).toDouble(),
-                      width: 24,
-                      color: colorScheme.primary,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(6),
-                      ),
-                    ),
-                  ],
-                );
-              }),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
