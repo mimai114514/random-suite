@@ -89,7 +89,7 @@ class _MainShellState extends State<MainShell> {
 
     if (await ftFile.exists()) {
       try {
-        await Process.start(ftPath, [], mode: ProcessStartMode.detached);
+        await Process.start('cmd', ['/c', 'start', '', ftPath]);
         exit(0);
       } catch (e) {
         if (mounted) {
